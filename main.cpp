@@ -1,15 +1,20 @@
+#include <cmath>
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
 
 using namespace std;
 using namespace sf;
 
-// constexpr defines an immutable compile-time value
+// Create constants for window
 constexpr int windowWidth{800}, windowHeight{600};
-constexpr float ballRadius{10.0f}, ballVelocity{8.0f};
 
-// Create constants for paddle
+// Create constants for ball and paddle
+constexpr float ballRadius{10.0f}, ballVelocity{8.0f};
 constexpr float paddleWidth{60.0f}, paddleHeight{20.0f}, paddleVelocity{6.0f};
+
+// Create constants for bricks
+constexpr float blockWidth{60.0f}, blockHeight{20.0f};
+constexpr int countBlocksX{11}, countBlocksY{4};
 
 struct Ball {
     // CircleShape is an SFML class that defines a renderable circle
@@ -80,8 +85,28 @@ struct Paddle {
         } else {
             velocity.x = 0;
         }
+    }
 
+    float x()       { return shape.getPosition().x; }
+    float y()       { return shape.getPosition().y; }
+    float left()    { return x() - shape.getSize().x / 2.0f; }
+    float right()   { return x() + shape.getSize().x / 2.0f; }
+    float top()     { return y() - shape.getSize().y / 2.0f; }
+    float bottom()  { return y() + shape.getSize().y / 2.0f; }
+};
 
+struct Brick {
+    RectangleShape shape;
+
+    // Check if brick has been hit or not
+    bool destroyed{false};
+
+    // Constructor
+    Brick(float posX, float posY) {
+        shape.setPosition(posX, posY);
+        shape.setSize({blockWidth, blockHeight});
+        shape.setFillColor(Color::Yellow);
+        shape.setOrigin(paddleWidth / 2.0f, paddleHeight / 2.0f);
     }
 
     float x()       { return shape.getPosition().x; }
@@ -98,10 +123,12 @@ template<class T1, class T2> bool isIntersecting(T1& mA, T2& mB) {
             && mA.bottom() >= mB.top() && mA.top() <= mB.bottom();
 };
 
-// Test collission between ball and paddle
+// Test collision between ball and paddle
 void testCollision(Paddle& mPaddle, Ball& mBall) {
     // If no intersection, return
-    if (!isIntersecting(mPaddle, mBall)) return;
+    if (!isIntersecting(mPaddle, mBall)) {
+        return;
+    }
 
     // Otherwise push the ball upwards
     mBall.velocity.y = -ballVelocity;
@@ -114,12 +141,56 @@ void testCollision(Paddle& mPaddle, Ball& mBall) {
     }
 }
 
+// Test collision between ball and brick
+void testCollision(Brick& mBrick, Ball& mBall) {
+    // If no intersection, return
+    if (!isIntersecting(mBrick, mBall)) {
+        return;
+    }
+
+    // Otherwise, destroy brick
+    mBrick.destroyed = true;
+
+    // Calculate how much ball intersects brick in every direction
+    float overlapLeft{mBall.right() - mBrick.left()};
+    float overlapRight{mBrick.right() - mBall.left()};
+    float overlapTop{mBall.bottom() - mBrick.top()};
+    float overlapBottom{mBrick.bottom() - mBall.top()};
+
+    // If magnitude of left overlap is smaller than right assume ball hit brick from the left
+    bool ballFromLeft(abs(overlapLeft) < abs(overlapRight));
+    // Same logic for top and bottom
+    bool ballFromTop(abs(overlapTop) < abs(overlapBottom));
+
+    // Store minimum overlaps for X and Y axes
+    float minOverlapX{ballFromLeft ? overlapLeft : overlapRight};
+    float minOverlapY{ballFromTop ? overlapTop : overlapBottom};
+
+    // Use overlap information to change ball response
+    if (abs(minOverlapX) < abs(minOverlapY)) {
+        mBall.velocity.x = ballFromLeft ? -ballVelocity : ballVelocity;
+    } else {
+        mBall.velocity.y = ballFromTop ? -ballVelocity : ballVelocity;
+    }
+}
+
 int main() {
     // Create an instance of Ball positioned at the center of the window
     Ball ball {windowWidth / 2, windowHeight / 2};
 
     // Create paddle and center in window
     Paddle paddle{ windowWidth / 2, windowHeight - 50};
+
+    // Create Brick container
+    vector<Brick> bricks;
+
+    // Fill up bricks vector
+    for (int iX{0}; iX < countBlocksX; ++iX) {
+        for (int iY{0}; iY < countBlocksY; ++iY) {
+            bricks.emplace_back((iX + 1) * (blockWidth + 3) + 22,
+                                (iY + 2) * (blockHeight + 3));
+        }
+    }
 
     // Creation of the game window
     RenderWindow window{{windowWidth, windowHeight}, "Arkanoid - 1"};
@@ -141,12 +212,23 @@ int main() {
         ball.update();
         paddle.update();
 
-        // Test collision
+        // Test collision between paddle and ball
         testCollision(paddle, ball);
+
+        // Text collision between ball and bricks
+        for(auto& brick : bricks) testCollision(brick, ball);
+
+        // Remove bricks if they're destroyed
+        bricks.erase(remove_if(begin(bricks), end(bricks),
+                [](const Brick& mBrick) {return mBrick.destroyed; }),
+                end(bricks));
 
         // Show the window contents
         window.draw(ball.shape);
         window.draw(paddle.shape);
+        for (auto& brick : bricks) {
+            window.draw(brick.shape);
+        }
         window.display();
     }
 
