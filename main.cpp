@@ -92,6 +92,28 @@ struct Paddle {
     float bottom()  { return y() + shape.getSize().y / 2.0f; }
 };
 
+// Template for testing if collisions are happening
+template<class T1, class T2> bool isIntersecting(T1& mA, T2& mB) {
+    return mA.right() >= mB.left() && mA.left() <= mB.right()
+            && mA.bottom() >= mB.top() && mA.top() <= mB.bottom();
+};
+
+// Test collission between ball and paddle
+void testCollision(Paddle& mPaddle, Ball& mBall) {
+    // If no intersection, return
+    if (!isIntersecting(mPaddle, mBall)) return;
+
+    // Otherwise push the ball upwards
+    mBall.velocity.y = -ballVelocity;
+
+    // Direct it depending on where ball contacted paddle
+    if (mBall.x() < mPaddle.x()) {
+        mBall.velocity.x = -ballVelocity;
+    } else {
+        mBall.velocity.x = ballVelocity;
+    }
+}
+
 int main() {
     // Create an instance of Ball positioned at the center of the window
     Ball ball {windowWidth / 2, windowHeight / 2};
@@ -115,11 +137,12 @@ int main() {
         // If Escape is pressed, break out of the loop
         if (Keyboard::isKeyPressed(Keyboard::Key::Escape)) break;
 
-        // Update the ball
+        // Update the ball and paddle
         ball.update();
-
-        // Update the paddle
         paddle.update();
+
+        // Test collision
+        testCollision(paddle, ball);
 
         // Show the window contents
         window.draw(ball.shape);
